@@ -16,7 +16,6 @@ https://t.me/anistreamdev
 2. Откройте `chrome://extensions/` в браузере
 3. Включите **"Режим разработчика"**
 4. Перетащите папку `extension` в окно браузера
-5. В настройках расширения укажите адрес: `https://89.111.155.235`
 
 ### 🇬🇧 English
 
@@ -24,7 +23,6 @@ https://t.me/anistreamdev
 2. Open `chrome://extensions/` in your browser
 3. Enable **"Developer mode"**
 4. Drag the `extension` folder into the browser window
-5. In extension settings, set server URL: `https://89.111.155.235`
 
 ---
 
