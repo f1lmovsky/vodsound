@@ -44,8 +44,15 @@ async function findRecording(vodId) {
     
     if (response.ok) {
       const data = await response.json();
-      console.log('[TAR] Запись найдена по VOD ID:', data);
-      return data;
+      // Если массив - взять первую запись (можно будет добавить переключение)
+      const recording = Array.isArray(data) ? data[0] : data;
+      if (Array.isArray(data) && data.length > 1) {
+        console.log(`[TAR] Найдено ${data.length} записей для VOD, используем первую`);
+      }
+      console.log('[TAR] Запись найдена по VOD ID:', recording);
+      console.log('[TAR] s3_url в записи:', recording?.s3_url);
+      console.log('[TAR] filepath в записи:', recording?.filepath);
+      return recording;
     }
     
     // Fallback: поиск по дате и каналу
@@ -137,12 +144,63 @@ function enableCustomAudio() {
     // Убрать /api из пути - nginx раздает файлы через /audio/
     // Убрать "recordings/" так как nginx alias уже указывает на эту директорию
     // URL-энкодить путь для корректной работы с кириллицей
-    let filePath = recordingInfo.filepath.replace(/\\/g, '/');
-    if (filePath.startsWith('recordings/')) {
-      filePath = filePath.substring('recordings/'.length);
+    // Использовать S3 URL если доступен, иначе локальный путь
+    let audioUrl;
+    console.log('[TAR] Проверка s3_url:', recordingInfo.s3_url, 'тип:', typeof recordingInfo.s3_url);
+    if (recordingInfo.s3_url && recordingInfo.s3_url.trim() !== '') {
+      let s3Url = recordingInfo.s3_url;
+      
+      // Проверить, содержит ли URL кириллицу (не-ASCII символы)
+      const hasUnicode = /[^\x00-\x7F]/.test(s3Url);
+      // Проверить, не закодирован ли URL уже (если есть %XX паттерны, но не %25XX - двойное кодирование)
+      const hasEncoded = /%[0-9A-Fa-f]{2}/.test(s3Url);
+      const hasDoubleEncoded = /%25[0-9A-Fa-f]{2}/.test(s3Url);
+      
+      if (hasUnicode && !hasEncoded) {
+        // URL содержит кириллицу и не закодирован - закодировать
+        try {
+          // Разделить URL вручную, чтобы избежать автоматического декодирования браузером
+          const match = s3Url.match(/^(https?:\/\/[^\/]+)(\/.*)$/);
+          if (match) {
+            const [, origin, path] = match;
+            // Разделить путь на части и закодировать каждую часть
+            const pathParts = path.split('/').filter(p => p);
+            const encodedPath = '/' + pathParts.map(part => encodeURIComponent(part)).join('/');
+            audioUrl = origin + encodedPath;
+            console.log('[TAR] S3 URL перекодирован для кириллицы:', audioUrl);
+          } else {
+            audioUrl = s3Url;
+            console.warn('[TAR] Не удалось разобрать S3 URL, используем как есть');
+          }
+        } catch (e) {
+          console.warn('[TAR] Ошибка обработки S3 URL:', e);
+          audioUrl = s3Url;
+        }
+      } else if (hasDoubleEncoded) {
+        // Двойное кодирование - декодировать один раз
+        try {
+          audioUrl = decodeURIComponent(s3Url);
+          console.log('[TAR] S3 URL декодирован (было двойное кодирование):', audioUrl);
+        } catch (e) {
+          audioUrl = s3Url;
+          console.warn('[TAR] Не удалось декодировать S3 URL');
+        }
+      } else {
+        // URL уже закодирован правильно или не содержит кириллицу
+        audioUrl = s3Url;
+        console.log('[TAR] Используется S3 URL (без изменений):', audioUrl);
+      }
+      console.log('[TAR] Финальный S3 URL:', audioUrl);
+    } else {
+      // Fallback на локальный путь
+      let filePath = recordingInfo.filepath.replace(/\\/g, '/');
+      if (filePath.startsWith('recordings/')) {
+        filePath = filePath.substring('recordings/'.length);
+      }
+      const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+      audioUrl = `${SERVER_URL}/audio/${encodedPath}`;
+      console.log('[TAR] Используется локальный URL:', audioUrl);
     }
-    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
-    const audioUrl = `${SERVER_URL}/audio/${encodedPath}`;
     customAudioElement.src = audioUrl;
     customAudioElement.preload = 'auto';
     customAudioElement.volume = audioVolume / 100; // Применить громкость (0-1)
