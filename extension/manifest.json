@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Twitch Audio Recorder Player",
+  "version": "1.0.0",
+  "description": "Воспроизводит записанное аудио на VOD записях Twitch",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.twitch.tv/*",
+    "https://twitch.tv/*",
+    "http://localhost:5000/*",
+    "https://89.111.155.235/*",
+    "http://89.111.155.235/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.twitch.tv/videos/*",
+        "https://twitch.tv/videos/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
+

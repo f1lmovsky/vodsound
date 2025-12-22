@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Audio Recorder</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 300px;
+      padding: 16px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #18181b;
+      color: #efeff1;
+      font-size: 14px;
+    }
+    
+    h1 {
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: #9147ff;
+    }
+    
+    .section {
+      margin-bottom: 16px;
+    }
+    
+    .label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 12px;
+      color: #adadb8;
+      text-transform: uppercase;
+    }
+    
+    input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #464649;
+      border-radius: 4px;
+      background: #0e0e10;
+      color: #efeff1;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #9147ff;
+    }
+    
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: #464649;
+      height: 6px;
+      border-radius: 3px;
+      outline: none;
+      padding: 0;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #9147ff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #772ce8;
+    }
+    
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border: none;
+      border-radius: 50%;
+      background: #9147ff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    input[type="range"]::-moz-range-thumb:hover {
+      background: #772ce8;
+    }
+    
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      background: #9147ff;
+      color: white;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    button:hover {
+      background: #772ce8;
+    }
+    
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      background: #1f1f23;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .status-label {
+      color: #adadb8;
+    }
+    
+    .status-value {
+      color: #efeff1;
+      font-weight: 600;
+    }
+    
+    .status-online {
+      color: #00f593;
+    }
+    
+    .status-offline {
+      color: #eb0400;
+    }
+    
+    .message {
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 12px;
+      font-size: 12px;
+      text-align: center;
+    }
+    
+    .message.success {
+      background: rgba(0, 245, 147, 0.15);
+      color: #00f593;
+    }
+    
+    .message.error {
+      background: rgba(235, 4, 0, 0.15);
+      color: #eb0400;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎵 Twitch Audio</h1>
+  
+  <div class="section">
+    <label class="label">Адрес сервера</label>
+    <input type="text" id="serverUrl" placeholder="http://localhost:5000">
+  </div>
+  
+  <div class="section">
+    <label class="label">Корректировка синхронизации (сек)</label>
+    <input type="number" id="syncOffset" placeholder="0" step="0.1" min="-10" max="10" value="0">
+    <div style="font-size: 11px; color: #adadb8; margin-top: 4px;">
+      Положительное значение - звук позже, отрицательное - раньше
+    </div>
+  </div>
+  
+  <div class="section">
+    <label class="label">Громкость записанного аудио</label>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <input type="range" id="audioVolume" min="0" max="100" value="100" style="flex: 1;">
+      <span id="volumeValue" style="color: #efeff1; font-weight: 600; min-width: 40px;">100%</span>
+    </div>
+  </div>
+  
+  <div class="section">
+    <button id="saveBtn">Сохранить</button>
+  </div>
+  
+  <div class="section">
+    <label class="label">Статус</label>
+    <div class="status" id="status">
+      <div class="status-item">
+        <span class="status-label">Подключение:</span>
+        <span class="status-value" id="connectionStatus">Проверка...</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <label class="label">Предложить стримера</label>
+    <input type="text" id="suggestStreamer" placeholder="Имя канала">
+    <div style="font-size: 11px; color: #adadb8; margin-top: 4px;">
+      Предложите добавить стримера для записи
+    </div>
+    <button id="suggestBtn" style="margin-top: 8px;">Предложить</button>
+  </div>
+  
+  <div id="message"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
+
