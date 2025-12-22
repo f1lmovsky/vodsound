@@ -1,10 +1,12 @@
 // Twitch Audio Recorder - Content Script
 
+// Константа с адресом сервера
+const SERVER_URL = 'https://live-anistream.ru';
+
 let customAudioEnabled = false;
 let customAudioElement = null;
 let originalVideo = null;
 let recordingInfo = null;
-let serverUrl = 'http://localhost:5000';
 let syncOffset = 0; // Ручная корректировка синхронизации (в секундах)
 let audioVolume = 100; // Громкость записанного аудио (0-100)
 
@@ -38,7 +40,7 @@ async function findRecording(vodId) {
   try {
     // Сначала пробуем по VOD ID
     console.log(`[TAR] Поиск записи по VOD ID: ${vodId}`);
-    let response = await fetch(`${serverUrl}/api/recording/by-vod/${vodId}`);
+    let response = await fetch(`${SERVER_URL}/api/recording/by-vod/${vodId}`);
     
     if (response.ok) {
       const data = await response.json();
@@ -52,7 +54,7 @@ async function findRecording(vodId) {
     
     if (vodInfo.channel && vodInfo.vodDate) {
       response = await fetch(
-        `${serverUrl}/api/recording/by-date?channel=${vodInfo.channel}&date=${vodInfo.vodDate}`
+        `${SERVER_URL}/api/recording/by-date?channel=${vodInfo.channel}&date=${vodInfo.vodDate}`
       );
       
       if (response.ok) {
@@ -140,7 +142,7 @@ function enableCustomAudio() {
       filePath = filePath.substring('recordings/'.length);
     }
     const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
-    const audioUrl = `${serverUrl}/audio/${encodedPath}`;
+    const audioUrl = `${SERVER_URL}/audio/${encodedPath}`;
     customAudioElement.src = audioUrl;
     customAudioElement.preload = 'auto';
     customAudioElement.volume = audioVolume / 100; // Применить громкость (0-1)
@@ -399,14 +401,7 @@ async function initialize() {
 
 // Загрузить настройки из storage
 try {
-  chrome.storage.sync.get(['serverUrl', 'syncOffset', 'audioVolume'], (result) => {
-    if (result.serverUrl) {
-      serverUrl = result.serverUrl;
-      console.log('[TAR] Server URL загружен:', serverUrl);
-    } else {
-      console.log('[TAR] Server URL не настроен, используется по умолчанию:', serverUrl);
-    }
-    
+  chrome.storage.sync.get(['syncOffset', 'audioVolume'], (result) => {
     if (result.syncOffset !== undefined) {
       syncOffset = parseFloat(result.syncOffset) || 0;
       console.log('[TAR] Корректировка синхронизации:', syncOffset, 'сек');

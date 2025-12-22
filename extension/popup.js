@@ -1,25 +1,16 @@
-const serverUrlInput = document.getElementById('serverUrl');
+// Константа с адресом сервера
+const SERVER_URL = 'https://live-anistream.ru';
+
 const syncOffsetInput = document.getElementById('syncOffset');
 const audioVolumeInput = document.getElementById('audioVolume');
 const volumeValue = document.getElementById('volumeValue');
 const suggestStreamerInput = document.getElementById('suggestStreamer');
-const saveBtn = document.getElementById('saveBtn');
 const suggestBtn = document.getElementById('suggestBtn');
 const messageDiv = document.getElementById('message');
 const connectionStatus = document.getElementById('connectionStatus');
 
-// Обновить отображение значения громкости
-audioVolumeInput.addEventListener('input', () => {
-  volumeValue.textContent = `${audioVolumeInput.value}%`;
-});
-
-chrome.storage.sync.get(['serverUrl', 'syncOffset', 'audioVolume'], (result) => {
-  if (result.serverUrl) {
-    serverUrlInput.value = result.serverUrl;
-  } else {
-    serverUrlInput.value = 'http://localhost:5000';
-  }
-  
+// Загрузить сохраненные настройки
+chrome.storage.sync.get(['syncOffset', 'audioVolume'], (result) => {
   if (result.syncOffset !== undefined) {
     syncOffsetInput.value = result.syncOffset;
   } else {
@@ -37,30 +28,23 @@ chrome.storage.sync.get(['serverUrl', 'syncOffset', 'audioVolume'], (result) => 
   checkServerStatus();
 });
 
-saveBtn.addEventListener('click', () => {
-  const serverUrl = serverUrlInput.value.trim();
-  const syncOffset = parseFloat(syncOffsetInput.value) || 0;
-  const audioVolume = parseInt(audioVolumeInput.value) || 100;
-  
-  if (!serverUrl) {
-    showMessage('Введите адрес сервера', 'error');
-    return;
-  }
-  
-  chrome.storage.sync.set({ serverUrl, syncOffset, audioVolume }, () => {
-    showMessage('Сохранено!', 'success');
-    checkServerStatus();
-  });
+// Автосохранение при изменении громкости
+audioVolumeInput.addEventListener('input', () => {
+  const audioVolume = parseInt(audioVolumeInput.value);
+  volumeValue.textContent = `${audioVolume}%`;
+  chrome.storage.sync.set({ audioVolume });
 });
 
+// Автосохранение при изменении синхронизации
+syncOffsetInput.addEventListener('change', () => {
+  const syncOffset = parseFloat(syncOffsetInput.value) || 0;
+  chrome.storage.sync.set({ syncOffset });
+  showMessage('Настройки сохранены', 'success');
+});
+
+// Предложить стримера
 suggestBtn.addEventListener('click', async () => {
-  const serverUrl = serverUrlInput.value.trim();
   const streamerName = suggestStreamerInput.value.trim().toLowerCase();
-  
-  if (!serverUrl) {
-    showMessage('Сначала настройте адрес сервера', 'error');
-    return;
-  }
   
   if (!streamerName) {
     showMessage('Введите имя стримера', 'error');
@@ -68,7 +52,7 @@ suggestBtn.addEventListener('click', async () => {
   }
   
   try {
-    const response = await fetch(`${serverUrl}/api/suggest-streamer`, {
+    const response = await fetch(`${SERVER_URL}/api/suggest-streamer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -88,16 +72,10 @@ suggestBtn.addEventListener('click', async () => {
   }
 });
 
+// Проверка статуса сервера
 async function checkServerStatus() {
-  const serverUrl = serverUrlInput.value.trim();
-  
-  if (!serverUrl) {
-    connectionStatus.innerHTML = '<span class="status-offline">● Не настроено</span>';
-    return;
-  }
-  
   try {
-    const response = await fetch(`${serverUrl}/api/status`);
+    const response = await fetch(`${SERVER_URL}/api/status`);
     
     if (response.ok) {
       const data = await response.json();
@@ -109,8 +87,12 @@ async function checkServerStatus() {
           <span class="status-value status-online">● Онлайн</span>
         </div>
         <div class="status-item">
-          <span class="status-label">Записей:</span>
-          <span class="status-value">${data.active_recordings}/${data.total_recordings}</span>
+          <span class="status-label">Активных записей:</span>
+          <span class="status-value">${data.active_recordings}</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Всего в архиве:</span>
+          <span class="status-value">${data.total_recordings}</span>
         </div>
         <div class="status-item">
           <span class="status-label">Стримеров:</span>
@@ -135,6 +117,6 @@ function showMessage(text, type) {
   }, 3000);
 }
 
+// Периодическая проверка статуса
 checkServerStatus();
 setInterval(checkServerStatus, 10000);
-
