@@ -1,5 +1,7 @@
 # VODSound
 
+https://t.me/anistreamdev
+
 Расширение для воспроизведения полной звуковой дорожки на Twitch VOD, без вырезанного аудио.
 
 *Browser extension to play complete audio on Twitch VODs, without muted sections.*
