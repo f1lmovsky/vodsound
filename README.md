@@ -30,6 +30,8 @@ https://t.me/anistreamdev
 
 Откройте VOD на Twitch → Нажмите кнопку **"Записанное аудио"** в плеере.
 
+Записаное аудио будет отмечено цветом на таймлайне
+
 *Open a Twitch VOD → Click **"Recorded Audio"** button in the player.*
 
 **Настройки:**
