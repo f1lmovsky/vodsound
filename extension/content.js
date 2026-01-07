@@ -258,7 +258,31 @@ function disableCustomAudio() {
   console.log('[TAR] Пользовательское аудио отключено');
 }
 
-// Синхронизация аудио с видео с учетом offset
+// Проверить, находимся ли мы в пропуске (реклама)
+function isInGap(audioTime) {
+  if (!recordingInfo || !recordingInfo.gaps) return false;
+  
+  try {
+    const gaps = typeof recordingInfo.gaps === 'string' 
+      ? JSON.parse(recordingInfo.gaps) 
+      : recordingInfo.gaps;
+    
+    if (!Array.isArray(gaps)) return false;
+    
+    // Проверить, попадает ли audioTime в какой-то из пропусков
+    for (const gap of gaps) {
+      if (audioTime >= gap.start && audioTime <= gap.end) {
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    console.warn('[TAR] Ошибка парсинга gaps:', e);
+    return false;
+  }
+}
+
+// Синхронизация аудио с видео с учетом offset и пропусков
 function syncAudioWithVideo(forceLog = false) {
   if (!customAudioElement || !originalVideo || !recordingInfo) return;
   
@@ -269,36 +293,59 @@ function syncAudioWithVideo(forceLog = false) {
   const videoTime = originalVideo.currentTime;
   const audioTime = videoTime - offset + syncOffset; // Применить ручную корректировку
   
-  // Проверить что мы в пределах записанного фрагмента
-  if (audioTime >= 0 && audioTime <= duration) {
-    // Проверить что аудио готово к перемотке
-    if (customAudioElement.readyState >= 2) { // HAVE_CURRENT_DATA или выше
-      const oldAudioTime = customAudioElement.currentTime;
-      const timeDiff = Math.abs(audioTime - oldAudioTime);
-      
-      // Логировать только значительные изменения (>5 секунд) или принудительно
-      if (timeDiff > 5 || forceLog) {
-        console.log(`[TAR] Sync: video=${videoTime.toFixed(1)}s → audio=${oldAudioTime.toFixed(1)}s→${audioTime.toFixed(1)}s (Δ=${timeDiff.toFixed(1)}s, correction=${syncOffset.toFixed(1)}s)`);
-      }
-      
+  // Проверить, находимся ли в пропуске (реклама)
+  const inGap = isInGap(audioTime);
+  
+  if (inGap) {
+    // Пропуск (реклама) - переключаемся на VOD аудио
+    customAudioElement.volume = 0; // Выключаем записанное аудио
+    originalVideo.muted = false;    // Включаем VOD аудио
+    
+    if (forceLog) {
+      console.log(`[TAR] 📺 В пропуске (${audioTime.toFixed(1)}s) - играет VOD аудио`);
+    }
+    
+    // Всё равно синхронизируем позицию (для плавного переключения после пропуска)
+    if (customAudioElement.readyState >= 2) {
       customAudioElement.currentTime = audioTime;
       customAudioElement.playbackRate = originalVideo.playbackRate;
-      
-      if (!originalVideo.paused) {
-        customAudioElement.play().catch(e => {
-          console.error('[TAR] Ошибка воспроизведения аудио:', e);
-        });
-      }
-    } else {
-      // Попробовать еще раз через 100ms (без лога для уменьшения спама)
-      setTimeout(() => syncAudioWithVideo(), 100);
     }
   } else {
-    // Вне диапазона записи - пауза
-    if (forceLog) {
-      console.log(`[TAR] Вне диапазона записи (audioTime=${audioTime.toFixed(1)}s), пауза`);
+    // Не в пропуске - используем записанное аудио
+    originalVideo.muted = true;      // Выключаем VOD аудио
+    customAudioElement.volume = audioVolume / 100; // Включаем записанное аудио
+    
+    // Проверить что мы в пределах записанного фрагмента
+    if (audioTime >= 0 && audioTime <= duration) {
+      // Проверить что аудио готово к перемотке
+      if (customAudioElement.readyState >= 2) { // HAVE_CURRENT_DATA или выше
+        const oldAudioTime = customAudioElement.currentTime;
+        const timeDiff = Math.abs(audioTime - oldAudioTime);
+        
+        // Логировать только значительные изменения (>5 секунд) или принудительно
+        if (timeDiff > 5 || forceLog) {
+          console.log(`[TAR] 🎙️ Sync: video=${videoTime.toFixed(1)}s → audio=${oldAudioTime.toFixed(1)}s→${audioTime.toFixed(1)}s (Δ=${timeDiff.toFixed(1)}s, correction=${syncOffset.toFixed(1)}s)`);
+        }
+        
+        customAudioElement.currentTime = audioTime;
+        customAudioElement.playbackRate = originalVideo.playbackRate;
+        
+        if (!originalVideo.paused) {
+          customAudioElement.play().catch(e => {
+            console.error('[TAR] Ошибка воспроизведения аудио:', e);
+          });
+        }
+      } else {
+        // Попробовать еще раз через 100ms (без лога для уменьшения спама)
+        setTimeout(() => syncAudioWithVideo(), 100);
+      }
+    } else {
+      // Вне диапазона записи - пауза
+      if (forceLog) {
+        console.log(`[TAR] Вне диапазона записи (audioTime=${audioTime.toFixed(1)}s), пауза`);
+      }
+      customAudioElement.pause();
     }
-    customAudioElement.pause();
   }
 }
 
@@ -524,7 +571,7 @@ function addTimelineIndicator() {
   // Удалить старый индикатор если есть
   removeTimelineIndicator();
   
-  // Создать индикатор
+  // Создать индикатор записи
   const indicator = document.createElement('div');
   indicator.id = 'tar-timeline-indicator';
   indicator.style.cssText = `
@@ -540,6 +587,46 @@ function addTimelineIndicator() {
   
   progressBar.style.position = 'relative';
   progressBar.appendChild(indicator);
+  
+  // Добавить визуализацию пропусков (реклама)
+  if (recordingInfo.gaps) {
+    try {
+      const gaps = typeof recordingInfo.gaps === 'string' 
+        ? JSON.parse(recordingInfo.gaps) 
+        : recordingInfo.gaps;
+      
+      if (Array.isArray(gaps) && gaps.length > 0) {
+        console.log(`[TAR] 📊 Добавление ${gaps.length} пропусков на таймлайн`);
+        
+        gaps.forEach((gap, index) => {
+          const gapIndicator = document.createElement('div');
+          gapIndicator.className = 'tar-gap-indicator';
+          gapIndicator.title = `Пропуск (реклама) ${gap.start.toFixed(1)}s - ${gap.end.toFixed(1)}s`;
+          
+          // Позиция с учетом offset
+          const gapStartInVideo = gap.start + offset;
+          const gapEndInVideo = gap.end + offset;
+          
+          gapIndicator.style.cssText = `
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(255, 59, 48, 0.6);
+            border-left: 2px solid rgba(255, 59, 48, 1);
+            border-right: 2px solid rgba(255, 59, 48, 1);
+            pointer-events: none;
+            z-index: 2;
+            left: ${(gapStartInVideo / videoDuration) * 100}%;
+            width: ${((gapEndInVideo - gapStartInVideo) / videoDuration) * 100}%;
+          `;
+          
+          progressBar.appendChild(gapIndicator);
+        });
+      }
+    } catch (e) {
+      console.warn('[TAR] Ошибка добавления индикаторов пропусков:', e);
+    }
+  }
 }
 
 function removeTimelineIndicator() {
@@ -547,6 +634,9 @@ function removeTimelineIndicator() {
   if (indicator) {
     indicator.remove();
   }
+  
+  // Удалить индикаторы пропусков
+  document.querySelectorAll('.tar-gap-indicator').forEach(el => el.remove());
 }
 
 // Слушать изменения URL (для SPA навигации)
